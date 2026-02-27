@@ -1,11 +1,13 @@
+using Chronolog.Api.Application.Handlers;
+using Chronolog.Api.Contracts;
+using Chronolog.Api.Domain.Entities;
 using Chronolog.Api.Infrastructure.Persistence;
+using Chronolog.Api.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 builder.Services.AddDbContext<ChronologDbContext>(optionsBuilder =>
@@ -13,9 +15,12 @@ builder.Services.AddDbContext<ChronologDbContext>(optionsBuilder =>
     optionsBuilder.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
+builder.Services.AddScoped<INoteRepository, NoteRepository>();
+builder.Services.AddScoped<ITagRepository, TagRepository>();
+builder.Services.AddScoped<CreateNoteHandler>();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -24,28 +29,45 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+static NoteResponse ToResponse(Note note) => new(
+    note.Id,
+    note.UserId,
+    note.Title,
+    note.Content,
+    note.Year,
+    note.Month,
+    note.Day,
+    note.DatePrecision,
+    note.SortableDate,
+    note.NoteTags.Select(nt => nt.Tag.NormalizedName)
+);
 
-app.MapGet("/weatherforecast", () =>
+app.MapPost("/notes", async (CreateNoteRequest request, CreateNoteHandler handler, CancellationToken ct) =>
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    var response = await handler.HandleAsync(request, ct);
+    return Results.Created($"/notes/{response.Id}", response);
 })
-.WithName("GetWeatherForecast");
+.WithName("CreateNote");
+
+app.MapGet("/notes", async (INoteRepository noteRepository, CancellationToken ct) =>
+{
+    var notes = await noteRepository.GetAllAsync(ct);
+    return Results.Ok(notes.Select(ToResponse));
+})
+.WithName("GetNotes");
+
+app.MapGet("/notes/{id:guid}", async (Guid id, INoteRepository noteRepository, CancellationToken ct) =>
+{
+    var note = await noteRepository.GetByIdAsync(id, ct);
+    return note is null ? Results.NotFound() : Results.Ok(ToResponse(note));
+})
+.WithName("GetNoteById");
+
+app.MapDelete("/notes/{id:guid}", async (Guid id, INoteRepository noteRepository, CancellationToken ct) =>
+{
+    var deleted = await noteRepository.DeleteAsync(id, ct);
+    return deleted ? Results.NoContent() : Results.NotFound();
+})
+.WithName("DeleteNote");
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

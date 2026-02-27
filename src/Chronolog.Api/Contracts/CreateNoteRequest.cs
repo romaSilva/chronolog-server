@@ -1,6 +1,6 @@
-namespace Chronolog.Api;
+namespace Chronolog.Api.Contracts;
 
-public record CreateNoteDto
+public record CreateNoteRequest
 {
     public required Guid UserId { get; set; }
 
@@ -13,4 +13,6 @@ public record CreateNoteDto
     public int? Month { get; set; }
 
     public int? Day { get; set; }
+
+    public IEnumerable<string>? Tags { get; init; } = [];
 }
