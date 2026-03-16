@@ -17,7 +17,7 @@ builder.Services.AddDbContext<ChronologDbContext>(optionsBuilder =>
 
 builder.Services.AddScoped<INoteRepository, NoteRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
-builder.Services.AddScoped<CreateNoteHandler>();
+builder.Services.AddScoped<NoteHandler>();
 
 var app = builder.Build();
 
@@ -42,12 +42,19 @@ static NoteResponse ToResponse(Note note) => new(
     note.NoteTags.Select(nt => nt.Tag.NormalizedName)
 );
 
-app.MapPost("/notes", async (CreateNoteRequest request, CreateNoteHandler handler, CancellationToken ct) =>
+app.MapPost("/notes", async (CreateNoteRequest request, NoteHandler handler, CancellationToken ct) =>
 {
     var response = await handler.HandleAsync(request, ct);
     return Results.Created($"/notes/{response.Id}", response);
 })
 .WithName("CreateNote");
+
+app.MapPut("/notes/{id:guid}", async (Guid id, UpdateNoteRequest request, NoteHandler handler, CancellationToken ct) =>
+{
+    var response = await handler.HandleAsync(id, request, ct);
+    return response is null ? Results.NotFound() : Results.Ok(response);
+})
+.WithName("UpdateNote");
 
 app.MapGet("/notes", async (INoteRepository noteRepository, CancellationToken ct) =>
 {

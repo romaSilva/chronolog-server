@@ -12,6 +12,11 @@ public class NoteRepository(ChronologDbContext context) : INoteRepository
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task UpdateAsync(Note note, CancellationToken cancellationToken = default)
+    {
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<IEnumerable<Note>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await context.Notes
